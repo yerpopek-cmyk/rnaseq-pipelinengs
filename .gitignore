@@ -1,0 +1,5 @@
+# Test and scratch files
+test_run.sh
+test_run_all.sh
+modify_bed.py
+*.tmp
