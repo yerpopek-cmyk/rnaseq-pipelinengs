@@ -1,0 +1,11 @@
+*.html linguist-generated
+*.counts linguist-generated
+*.tsv linguist-generated
+*.vcf linguist-generated
+*.vcf.gz linguist-generated
+*.gtf linguist-generated
+*.tab linguist-generated
+*.bed linguist-generated
+*.bim linguist-generated
+*.fam linguist-generated
+*.log linguist-generated
