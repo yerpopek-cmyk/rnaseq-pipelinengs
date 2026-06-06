@@ -1,3 +1,26 @@
+# Ignore heavy raw data and alignments
+RNA_Seq/fastq/
+RNA_Seq/STAR/
+RNA_Seq/reference/
+RNA_Seq/result/bam/
+RNA_Seq/result/final_bam/
+RNA_Seq/result/MarkDuplicates/
+RNA_Seq/result/ReplaceReadGroups/
+RNA_Seq/result/SplitN/
+RNA_Seq/result/BaseRecalibrator/
+RNA_Seq/result/gvcf/
+RNA_Seq/result/vcf_per_sample/
+RNA_Seq/result/tmp/
+RNA_Seq/result/fastqc/
+RNA_Seq/result/qualimap/
+RNA_Seq/result/multiqc_data/
+RNA_Seq/result/*.bam
+RNA_Seq/result/*.bai
+RNA_Seq/result/RNA.vcf.gz
+RNA_Seq/result/RNA.vcf.gz.tbi
+RNA_Seq/result/RNA_combin.vcf.gz
+RNA_Seq/result/RNA_combin.vcf.gz.tbi
+
 # Test and scratch files
 test_run.sh
 test_run_all.sh
