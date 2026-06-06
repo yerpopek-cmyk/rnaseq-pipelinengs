@@ -1,0 +1,15 @@
+[Jun 06 20:37:51] Running TensorQTL v1.0.10: cis-QTL mapping
+  * using GPU (NVIDIA GeForce RTX 5060 Laptop GPU)
+  * reading phenotypes (expression_final.bed.gz)
+  * cis-window detected as [start - 1,000,000, end + 1,000,000]
+  * loading genotypes
+cis-QTL mapping: empirical p-values for phenotypes
+  * 2 samples
+  * 10 phenotypes
+  * 2749 variants
+  * cis-window: ±1,000,000
+  * computing permutations
+  Time elapsed: 0.06 min
+done.
+  * writing output
+[Jun 06 20:37:59] Finished mapping
