@@ -15,6 +15,13 @@ The pipeline is divided into 7 main stages:
 6. **Annotation & Fusion Detection**: Annotates variants with **SnpEff** and detects gene fusions using **Arriba**.
 7. **ASE & eQTL**: Prepares per-sample VCFs, calculates Allele-Specific Expression (ASE) using **GATK ASEReadCounter**, and performs cis-eQTL mapping using **TensorQTL** and **plink2**.
 
+## Raw Data & Reference
+The pipeline was developed and tested using the following data:
+- **Raw Data**: FASTQ files generated from human RNA-Seq runs (e.g., `ERR188021`, `ERR188022`).
+- **Reference Genome**: Human genome assembly `hg38` (specifically utilizing `chr19` for targeted test runs and alignment).
+- **Reference Annotations**: `chr19.gtf` for splice junction guidance and gene quantification.
+- **Known Variants**: `common_all_20180418.vcf.gz` (used for GATK Base Quality Score Recalibration).
+
 ## Prerequisites
 The pipeline relies on several Conda environments to manage dependencies. Ensure the following environments are created and contain the respective tools:
 - `STAR`: fastqc, parallel, star, samtools, htseq, stringtie

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Инициализация Conda для неинтерактивного шелла (исправление ошибки CondaError)
+# Conda initialization for non-interactive shell (fixes CondaError)
 if command -v conda &>/dev/null; then
     eval "$(conda shell.bash hook)"
 else
@@ -14,19 +14,19 @@ else
 fi
 
 # ==========================================
-# ЭТАП 0: Настройка окружения и путей
+# STAGE 0: Environment and paths setup
 # ==========================================
 
-# export — переменные должны быть видны в subshell'ах GNU parallel,
-# иначе ${THREADS} внутри одинарных кавычек не раскроется
+# export — variables must be visible in GNU parallel subshells,
+# otherwise ${THREADS} inside single quotes will not expand
 export THREADS=6
 export MEM="6G"
 
 WORKDIR="$(pwd)/RNA_Seq"
 export TMPDIR="${WORKDIR}/result/tmp"
 
-# Правильный синтаксис GATK4: --java-options "флаги"
-# (старая форма gatk -Xmx... Tool — неверна для GATK4)
+# Correct GATK4 syntax: --java-options "flags"
+# (old format gatk -Xmx... Tool — is incorrect for GATK4)
 export JAVA_OPTS="-Xmx${MEM} -Djava.io.tmpdir=${TMPDIR}"
 
 mkdir -p "${WORKDIR}"
@@ -36,23 +36,23 @@ cd "${WORKDIR}"
 # ln -sf /home/prep01/RNA/fastq     .
 # ln -sf /home/prep01/data/reference .
 
-# bam_wasp убран — WASP в скрипте не используется
+# bam_wasp removed — WASP is not used in the script
 mkdir -p result/{bam,fastqc,qualimap,stringtie,MarkDuplicates,SplitN,\
 ReplaceReadGroups,BaseRecalibrator,final_bam,gvcf,fusions,\
 vcf_per_sample,tensorqtl,tmp}
 
 # ==========================================
-# ЭТАП 1: Контроль качества сырых ридов + Выравнивание (STAR)
+# STAGE 1: Raw reads QC + Alignment (STAR)
 # ==========================================
 conda activate STAR
 
-# FastQC на сырых FASTQ — стандарт NGS; до выравнивания
+# FastQC on raw FASTQ — standard NGS practice; before alignment
 fastqc --threads "${THREADS}" fastq/*.fastq.gz -o result/fastqc
 
-# --twopassMode Basic: двухпроходный режим — сначала собирает splice junctions,
-#   затем повторно выравнивает с их учётом (лучшее обнаружение новых джанкшенов)
-# --outSAMattributes NH HI AS NM MD: атрибуты, нужные GATK (в т. ч. MD для BQSR)
-# -j 1: один образец за раз; STAR уже использует ${THREADS} потоков внутри
+# --twopassMode Basic: 2-pass mode — first collects splice junctions,
+#   then realigns with them (better novel junction discovery)
+# --outSAMattributes NH HI AS NM MD: attributes required for GATK (including MD for BQSR)
+# -j 1: one sample at a time; STAR already uses ${THREADS} threads internally
 parallel --progress -j 1 -N 2 \
   'STAR \
     --outSAMstrandField      intronMotif \
@@ -73,11 +73,11 @@ parallel --progress -j 1 -N 2 \
   ::: fastq/*.fastq.gz
 
 # ==========================================
-# ЭТАП 2: Оценка уровня экспрессии
+# STAGE 2: Expression quantification
 # ==========================================
 parallel --progress -j "${THREADS}" 'samtools index {}' ::: ./result/bam/*.bam
 
-# HTSeq: -j 2, т. к. htseq-count однопоточный и требует ~1-2 ГБ на процесс
+# HTSeq: -j 2, since htseq-count is single-threaded and requires ~1-2 GB per process
 for strand in no yes reverse; do
   suffix=""
   [[ "${strand}" == "yes"     ]] && suffix="_s"
@@ -88,7 +88,7 @@ for strand in no yes reverse; do
     ::: ./result/bam/*.bam
 done
 
-# StringTie: -j 3 × -p 2 внутри = ровно 6 потоков суммарно
+# StringTie: -j 3 x -p 2 internally = exactly 6 threads total
 parallel --progress -j 3 \
   'stringtie {} \
     -o ./result/stringtie/{/.}.gtf \
@@ -105,26 +105,26 @@ parallel --progress -j 3 \
 conda deactivate
 
 # ==========================================
-# ЭТАП 3: Подготовка BAM для GATK4
+# STAGE 3: BAM preparation for GATK4
 # ==========================================
 conda activate gatk4
 
-# Добавление Read Groups (метаданные, без которых GATK отказывает)
+# Adding Read Groups (metadata, without which GATK fails)
 parallel --progress -j 2 \
   "gatk --java-options '${JAVA_OPTS}' AddOrReplaceReadGroups \
     -I {}  -O ./result/ReplaceReadGroups/{/} \
     --RGSM {/.} --RGID {/.} --RGPL illumina --RGLB lib1 --RGPU unit1" \
   ::: ./result/bam/*.bam
 
-# Маркировка ПЦР-дубликатов
+# Mark PCR duplicates
 parallel --progress -j 2 \
   "gatk --java-options '${JAVA_OPTS}' MarkDuplicates \
     -I {} -O result/MarkDuplicates/{/} \
     -M result/MarkDuplicates/{/.}.metrics.txt" \
   ::: ./result/ReplaceReadGroups/*.bam
 
-# SplitNCigarReads: разрез по интронам (N в CIGAR), исправляет MQ 255→60
-# -j 1: операция памяте-интенсивна; tmpdir задан через JAVA_OPTS
+# SplitNCigarReads: splits reads at introns (N in CIGAR), fixes MQ 255->60
+# -j 1: memory-intensive operation; tmpdir specified via JAVA_OPTS
 parallel --progress -j 1 \
   "gatk --java-options '${JAVA_OPTS}' SplitNCigarReads \
     -R ./STAR/genome.fa \
@@ -132,7 +132,7 @@ parallel --progress -j 1 \
     --tmp-dir ${TMPDIR}" \
   ::: ./result/MarkDuplicates/*.bam
 
-# BQSR — перекалибровка качества баз по известным вариантам
+# BQSR — Base Quality Score Recalibration using known variants
 parallel --progress -j 1 \
   "gatk --java-options '${JAVA_OPTS}' BaseRecalibrator \
     -I {} -R ./STAR/genome.fa \
@@ -147,15 +147,15 @@ parallel --progress -j 2 \
     -O ./result/final_bam/{/.}.bam" \
   ::: ./result/SplitN/*.bam
 
-# Индексация финальных BAM — обязательна перед HaplotypeCaller
+# Final BAM indexing — mandatory before HaplotypeCaller
 parallel --progress -j "${THREADS}" 'samtools index {}' ::: ./result/final_bam/*.bam
 
 # ==========================================
-# ЭТАП 4: Вызов и фильтрация вариантов
+# STAGE 4: Variant calling and filtration
 # ==========================================
 
 # --dont-use-soft-clipped-bases: GATK RNA best practice —
-#   STAR оставляет мягкие клипы на концах ридов, которые дают ложные варианты
+#   STAR leaves soft clips at read ends, which produce false variants
 parallel --progress -j 1 \
   "gatk --java-options '-Xmx${MEM} -Djava.io.tmpdir=${TMPDIR}' HaplotypeCaller \
     -R ./STAR/genome.fa -I {} \
@@ -176,7 +176,7 @@ gatk --java-options "${JAVA_OPTS}" GenotypeGVCFs \
   --variant result/RNA_combin.vcf.gz \
   -O result/RNA.vcf.gz
 
-# Жёсткая фильтрация: VQSR для РНК недоступен
+# Hard filtration: VQSR is not available for RNA
 gatk --java-options "${JAVA_OPTS}" VariantFiltration \
   -R STAR/genome.fa \
   -V result/RNA.vcf.gz \
@@ -188,16 +188,16 @@ gatk --java-options "${JAVA_OPTS}" VariantFiltration \
 conda deactivate
 
 # ==========================================
-# ЭТАП 5: Контроль качества (QC)
+# STAGE 5: Quality Control (QC)
 # ==========================================
 conda activate QC_fastq
 
-# FastQC на финальных BAM (после BQSR)
+# FastQC on final BAMs (after BQSR)
 fastqc --threads "${THREADS}" ./result/final_bam/*.bam -o result/fastqc
 
 unset DISPLAY
 
-# Qualimap на финальных BAM — после BQSR покрытие точнее
+# Qualimap on final BAMs — coverage is more accurate after BQSR
 parallel --progress -j 2 \
   'qualimap bamqc \
     --bam {} \
@@ -208,8 +208,8 @@ parallel --progress -j 2 \
     --java-mem-size=${MEM}' \
   ::: ./result/final_bam/*.bam
 
-# bcftools stats напрямую по GVCF-файлам
-# (в оригинале: имена брались из BAM → непрямая и хрупкая зависимость)
+# bcftools stats directly on GVCF files
+# (originally: names taken from BAM -> indirect and fragile dependency)
 parallel --progress -j "${THREADS}" \
   'bcftools stats --threads 2 {} > {}.stats.txt' \
   ::: result/gvcf/*.gvcf.gz
@@ -219,15 +219,15 @@ cd result && multiqc ./ && cd "${WORKDIR}"
 conda deactivate
 
 # ==========================================
-# ЭТАП 6: Аннотация вариантов + поиск фьюзионов
+# STAGE 6: Variant annotation + fusion detection
 # ==========================================
 conda activate snpEff
 
 snpEff -Xmx"${MEM}" hg38 result/RNA.filt.vcf.gz > result/RNA.ann.vcf
 grep -E "^#|HIGH" result/RNA.ann.vcf > result/RNA.high_impact.vcf
-echo "HIGH-impact вариантов: $(grep -vc '^#' result/RNA.high_impact.vcf || true)"
+echo "HIGH-impact variants: $(grep -vc '^#' result/RNA.high_impact.vcf || true)"
 
-# arriba запускается из WORKDIR — пути однозначны, нет проблем с cd result
+# arriba is launched from WORKDIR — unambiguous paths, no issues with cd result
 parallel --progress -j 2 \
   'arriba \
     -x {} \
@@ -241,7 +241,7 @@ parallel --progress -j 2 \
 conda deactivate
 
 # ==========================================
-# ЭТАП 7: ASE (аллель-специфическая экспрессия) и eQTL
+# STAGE 7: ASE (Allele-Specific Expression) and eQTL
 # ==========================================
 conda activate snpEff
 
@@ -254,14 +254,14 @@ for s in $(bcftools query -l result/RNA.filt.vcf.gz); do
   tabix -p vcf "result/vcf_per_sample/${s}.het.snps.vcf.gz"
 done
 
-# Проверка и добавление шума в BED-файл экспрессии, если дисперсия нулевая (для тестовых данных)
+# Check and inject noise into the expression BED file if variance is zero (for test data)
 python -c "
 import gzip, subprocess
 bed_path = './STAR/expression_final.bed.gz'
 with gzip.open(bed_path, 'rt') as f:
     lines = f.readlines()
 if not any(len(p) >= 6 and p[4] != p[5] for p in (l.strip().split('\t') for l in lines[1:])):
-    print('Внимание: Обнаружена нулевая дисперсия в BED-файле экспрессии. Добавляем искусственный шум для работы tensorqtl...')
+    print('Warning: Zero variance detected in expression BED file. Injecting artificial noise for tensorqtl...')
     with open('./STAR/expression_final.bed', 'w') as out:
         out.write(lines[0])
         for i, line in enumerate(lines[1:]):
@@ -275,7 +275,6 @@ if not any(len(p) >= 6 and p[4] != p[5] for p in (l.strip().split('\t') for l in
     subprocess.run(['bgzip', './STAR/expression_final.bed'])
     subprocess.run(['tabix', '-p', 'bed', bed_path])
 "
-
 
 conda deactivate
 
@@ -302,8 +301,8 @@ plink2 \
   --output-chr chr26 \
   --out genotypes
 
-# \. в awk-регексе — экранированная точка (literal dot);
-# без экранирования . совпадает с любым символом
+# \. in awk regex — escaped literal dot;
+# without escaping, . matches any character
 awk '{gsub(/\.fastq_Aligned.*/, "", $1); gsub(/\.fastq_Aligned.*/, "", $2); print}' \
   genotypes.fam > _tmp.fam && mv _tmp.fam genotypes.fam
 
@@ -316,6 +315,6 @@ cd "${WORKDIR}"
 conda deactivate
 
 echo "============================================"
-echo "  RNA-seq пайплайн успешно завершён!"
-echo "  Результаты: ${WORKDIR}/result/"
+echo "  RNA-seq pipeline completed successfully!"
+echo "  Results: ${WORKDIR}/result/"
 echo "============================================"
